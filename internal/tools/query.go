@@ -65,12 +65,7 @@ func NewQueryHandler(client *onec.Client) mcp.ToolHandler {
 			return nil, fmt.Errorf("только SELECT/ВЫБРАТЬ запросы разрешены")
 		}
 
-		if input.Limit <= 0 {
-			input.Limit = defaultQueryLimit
-		}
-		if input.Limit > maxQueryLimit {
-			input.Limit = maxQueryLimit
-		}
+		input.Limit = clampLimit(input.Limit, defaultQueryLimit, maxQueryLimit)
 
 		body := onec.QueryRequest{
 			Query: input.Query,

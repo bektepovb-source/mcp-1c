@@ -310,17 +310,19 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	total := len(matches)
+
 	limit := req.Limit
 	if limit <= 0 {
 		limit = 50
 	}
-	if limit < len(matches) {
+	if limit < total {
 		matches = matches[:limit]
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"matches": matches,
-		"total":   len(matches),
+		"total":   total,
 	})
 }
 

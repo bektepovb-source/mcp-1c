@@ -10,12 +10,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// objectStructureInput is the input for the get_object_structure tool.
-type objectStructureInput struct {
-	ObjectType string `json:"object_type"`
-	ObjectName string `json:"object_name"`
-}
-
 // ObjectStructureTool returns the MCP tool definition for get_object_structure.
 func ObjectStructureTool() *mcp.Tool {
 	return &mcp.Tool{
@@ -41,7 +35,7 @@ func ObjectStructureTool() *mcp.Tool {
 // NewObjectStructureHandler returns a ToolHandler that fetches object structure from 1C.
 func NewObjectStructureHandler(client *onec.Client) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		var input objectStructureInput
+		var input objectInput
 		if err := json.Unmarshal(req.Params.Arguments, &input); err != nil {
 			return nil, fmt.Errorf("parsing input: %w", err)
 		}

@@ -10,11 +10,6 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-type formInput struct {
-	ObjectType string `json:"object_type"`
-	ObjectName string `json:"object_name"`
-}
-
 // FormStructureTool returns the MCP tool definition for get_form_structure.
 func FormStructureTool() *mcp.Tool {
 	return &mcp.Tool{
@@ -41,7 +36,7 @@ func FormStructureTool() *mcp.Tool {
 // NewFormStructureHandler returns a ToolHandler that fetches form structure from 1C.
 func NewFormStructureHandler(client *onec.Client) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		var input formInput
+		var input objectInput
 		if err := json.Unmarshal(req.Params.Arguments, &input); err != nil {
 			return nil, fmt.Errorf("parsing input: %w", err)
 		}

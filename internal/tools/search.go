@@ -53,12 +53,7 @@ func NewSearchCodeHandler(client *onec.Client) mcp.ToolHandler {
 		if input.Query == "" {
 			return nil, fmt.Errorf("query is required")
 		}
-		if input.Limit <= 0 {
-			input.Limit = defaultSearchLimit
-		}
-		if input.Limit > maxSearchLimit {
-			input.Limit = maxSearchLimit
-		}
+		input.Limit = clampLimit(input.Limit, defaultSearchLimit, maxSearchLimit)
 
 		body := onec.SearchRequest{
 			Query: input.Query,
