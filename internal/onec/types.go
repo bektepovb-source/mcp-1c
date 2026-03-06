@@ -53,3 +53,8 @@ type QueryResult struct {
 	Total     int      `json:"total"`
 	Truncated bool     `json:"truncated"`
 }
+
+// VersionInfo represents the extension version response.
+type VersionInfo struct {
+	Version string `json:"version"`
+}
