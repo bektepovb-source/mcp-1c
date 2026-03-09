@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/feenlace/mcp-1c/internal/onec"
+	"github.com/feenlace/mcp-1c/onec"
 )
 
 // objectKey combines type and name for map lookup.
@@ -174,10 +174,6 @@ var (
 		},
 	}
 
-	modules = map[string]string{
-		"Document/РеализацияТоваровУслуг/ObjectModule": "Процедура ОбработкаПроведения(Отказ, РежимПроведения)\n\tДвижения.ТоварыНаСкладах.Записывать = Истина;\n\tДля Каждого ТекСтрокаТовары Из Товары Цикл\n\t\tДвижение = Движения.ТоварыНаСкладах.Добавить();\n\t\tДвижение.ВидДвижения = ВидДвиженияНакопления.Расход;\n\t\tДвижение.Период = Дата;\n\t\tДвижение.Номенклатура = ТекСтрокаТовары.Номенклатура;\n\t\tДвижение.Склад = Склад;\n\t\tДвижение.Количество = ТекСтрокаТовары.Количество;\n\tКонецЦикла;\nКонецПроцедуры",
-		"CommonModule/ОбщегоНазначения/CommonModule": "Функция ТекущаяДатаСеанса() Экспорт\n\tВозврат ТекущаяДата();\nКонецФункции",
-	}
 )
 
 // isSelectQuery checks if a query starts with SELECT/ВЫБРАТЬ keyword.
@@ -225,35 +221,6 @@ func handleObject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, obj)
 }
 
-func handleModule(w http.ResponseWriter, r *http.Request) {
-	log.Printf("%s %s", r.Method, r.URL.Path)
-
-	// Parse path: /mcp/module/{type}/{name}/{moduleType}
-	path := strings.TrimPrefix(r.URL.Path, "/mcp/module/")
-	parts := strings.SplitN(path, "/", 3)
-	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "Invalid path. Expected /mcp/module/{type}/{name}/{moduleType}",
-		})
-		return
-	}
-
-	key := strings.Join(parts, "/")
-	code, ok := modules[key]
-	if !ok {
-		writeJSON(w, http.StatusNotFound, map[string]string{
-			"error": "Module not found",
-		})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]string{
-		"Имя":       parts[1],
-		"ВидМодуля": parts[2],
-		"Код":       code,
-	})
-}
-
 func handleQuery(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s %s", r.Method, r.URL.Path)
 
@@ -285,71 +252,25 @@ func handleQuery(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func handleSearch(w http.ResponseWriter, r *http.Request) {
-	log.Printf("%s %s", r.Method, r.URL.Path)
-	if r.Method != http.MethodPost {
-		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "POST required"})
-		return
-	}
-
-	var req struct {
-		Query string `json:"query"`
-		Limit int    `json:"limit"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "Invalid JSON body"})
-		return
-	}
-
-	// Simulate searching across modules.
-	matches := []map[string]any{
-		{
-			"module":  "Document.РеализацияТоваровУслуг.ObjectModule",
-			"line":    5,
-			"context": "Процедура ОбработкаПроведения(Отказ, РежимПроведения)",
-		},
-		{
-			"module":  "CommonModule.ОбщегоНазначения",
-			"line":    12,
-			"context": "Функция ТекущаяДатаСеанса() Экспорт",
-		},
-	}
-
-	total := len(matches)
-
-	limit := req.Limit
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit < total {
-		matches = matches[:limit]
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"matches": matches,
-		"total":   total,
-	})
-}
-
 func handleForm(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s %s", r.Method, r.URL.Path)
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"Имя":       "ФормаДокумента",
-		"Заголовок": "Реализация товаров и услуг",
-		"Элементы": []map[string]any{
-			{"Имя": "Контрагент", "Тип": "ПолеВвода", "Заголовок": "Контрагент", "ПутьКДанным": "Объект.Контрагент"},
-			{"Имя": "Организация", "Тип": "ПолеВвода", "Заголовок": "Организация", "ПутьКДанным": "Объект.Организация"},
-			{"Имя": "СуммаДокумента", "Тип": "ПолеВвода", "Заголовок": "Сумма", "ПутьКДанным": "Объект.СуммаДокумента"},
-			{"Имя": "ТаблицаТоваров", "Тип": "ТаблицаФормы", "Заголовок": "Товары", "ПутьКДанным": "Объект.Товары"},
+		"name":  "ФормаДокумента",
+		"title": "Реализация товаров и услуг",
+		"elements": []map[string]any{
+			{"name": "Контрагент", "type": "ПолеВвода", "title": "Контрагент", "dataPath": "Объект.Контрагент"},
+			{"name": "Организация", "type": "ПолеВвода", "title": "Организация", "dataPath": "Объект.Организация"},
+			{"name": "СуммаДокумента", "type": "ПолеВвода", "title": "Сумма", "dataPath": "Объект.СуммаДокумента"},
+			{"name": "ТаблицаТоваров", "type": "ТаблицаФормы", "title": "Товары", "dataPath": "Объект.Товары"},
 		},
-		"Команды": []map[string]any{
-			{"Имя": "ПровестиИЗакрыть", "Действие": "ПровестиИЗакрыть"},
-			{"Имя": "Записать", "Действие": "Записать"},
+		"commands": []map[string]any{
+			{"name": "ПровестиИЗакрыть", "action": "ПровестиИЗакрыть"},
+			{"name": "Записать", "action": "Записать"},
 		},
-		"Обработчики": []map[string]any{
-			{"Событие": "ПриОткрытии", "Обработчик": "ПриОткрытии"},
-			{"Событие": "ПередЗаписью", "Обработчик": "ПередЗаписью"},
+		"handlers": []map[string]any{
+			{"event": "ПриОткрытии", "handler": "ПриОткрытии"},
+			{"event": "ПередЗаписью", "handler": "ПередЗаписью"},
 		},
 	})
 }
@@ -445,9 +366,20 @@ func handleEventLog(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func handleConfiguration(w http.ResponseWriter, r *http.Request) {
+	log.Printf("%s %s", r.Method, r.URL.Path)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name":             "БухгалтерияПредприятия",
+		"version":          "3.0.150.28",
+		"vendor":           "Фирма \"1С\"",
+		"platform_version": "8.3.25.1394",
+		"mode":             "file",
+	})
+}
+
 func handleVersion(w http.ResponseWriter, r *http.Request) {
 	log.Printf("%s %s", r.Method, r.URL.Path)
-	writeJSON(w, http.StatusOK, map[string]string{"version": "0.2.0"})
+	writeJSON(w, http.StatusOK, map[string]string{"version": "0.3.0"})
 }
 
 func main() {
@@ -460,12 +392,12 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/mcp/metadata", handleMetadata)
 	mux.HandleFunc("/mcp/object/", handleObject)
-	mux.HandleFunc("/mcp/module/", handleModule)
 	mux.HandleFunc("/mcp/query", handleQuery)
-	mux.HandleFunc("/mcp/search", handleSearch)
+
 	mux.HandleFunc("/mcp/form/", handleForm)
 	mux.HandleFunc("/mcp/validate-query", handleValidateQuery)
 	mux.HandleFunc("/mcp/eventlog", handleEventLog)
+	mux.HandleFunc("/mcp/configuration", handleConfiguration)
 	mux.HandleFunc("/mcp/version", handleVersion)
 
 	addr := fmt.Sprintf(":%d", *port)

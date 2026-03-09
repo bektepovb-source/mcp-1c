@@ -12,7 +12,7 @@ func TestLoadDefaults(t *testing.T) {
 
 	cfg := Load()
 
-	if cfg.BaseURL != "http://localhost:8080/mcp" {
+	if cfg.BaseURL != "http://localhost:8080/hs/mcp" {
 		t.Errorf("expected default base URL, got %s", cfg.BaseURL)
 	}
 	if cfg.User != "" {
@@ -48,7 +48,7 @@ func TestLoadPartialOverride(t *testing.T) {
 
 	cfg := Load()
 
-	if cfg.BaseURL != "http://localhost:8080/mcp" {
+	if cfg.BaseURL != "http://localhost:8080/hs/mcp" {
 		t.Errorf("expected default base URL, got %s", cfg.BaseURL)
 	}
 	if cfg.User != "operator" {

@@ -2,35 +2,37 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"flag"
 	"fmt"
 	"os"
 	"time"
 
+	"github.com/feenlace/mcp-1c/dump"
+	"github.com/feenlace/mcp-1c/extension"
 	"github.com/feenlace/mcp-1c/internal/config"
-	"github.com/feenlace/mcp-1c/internal/installer"
-	"github.com/feenlace/mcp-1c/internal/onec"
-	"github.com/feenlace/mcp-1c/internal/server"
+	"github.com/feenlace/mcp-1c/installer"
+	"github.com/feenlace/mcp-1c/onec"
+	"github.com/feenlace/mcp-1c/server"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-//go:embed extension/MCP_HTTPService.cfe
-var embeddedCFE []byte
-
-const expectedExtensionVersion = "0.2.0"
+const expectedExtensionVersion = "0.4.0"
 
 func main() {
 	baseURL := flag.String("base", "", "Base URL of 1C HTTP service")
 	user := flag.String("user", "", "1C HTTP service user")
 	password := flag.String("password", "", "1C HTTP service password")
+	dumpDir := flag.String("dump", "", "Path to DumpConfigToFiles output (enables search_code tool)")
 	installDB := flag.String("install", "", "Install extension into 1C database at given path")
+	platformPath := flag.String("platform", "", "Path to 1C platform executable (auto-detected if omitted)")
+	dbUser := flag.String("db-user", "", "1C database user for DESIGNER (install mode)")
+	dbPassword := flag.String("db-password", "", "1C database password for DESIGNER (install mode)")
 	flag.Parse()
 
 	// Install mode.
 	if *installDB != "" {
 		fmt.Println("Installing MCP extension into 1C database...")
-		if err := installer.Install(embeddedCFE, *installDB); err != nil {
+		if err := installer.Install(extension.Source, *installDB, *platformPath, *dbUser, *dbPassword); err != nil {
 			fmt.Fprintf(os.Stderr, "Installation error: %v\n", err)
 			os.Exit(1)
 		}
@@ -56,7 +58,18 @@ func main() {
 
 	checkExtensionVersion(client)
 
-	s := server.New(client)
+	var dumpSearcher *dump.Searcher
+	if *dumpDir != "" {
+		var err error
+		dumpSearcher, err = dump.NewSearcher(*dumpDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "loading dump from %s: %v\n", *dumpDir, err)
+			os.Exit(1)
+		}
+		fmt.Fprintf(os.Stderr, "Loaded %d BSL modules from dump\n", dumpSearcher.ModuleCount())
+	}
+
+	s := server.New(client, dumpSearcher)
 
 	if err := s.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		fmt.Fprintf(os.Stderr, "mcp-1c error: %v\n", err)

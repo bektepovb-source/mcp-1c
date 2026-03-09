@@ -14,7 +14,7 @@ type Config struct {
 // Environment variables override any values already set in the Config.
 func Load() *Config {
 	cfg := &Config{
-		BaseURL: "http://localhost:8080/mcp",
+		BaseURL: "http://localhost:8080/hs/mcp",
 	}
 
 	if v := os.Getenv("MCP_1C_BASE_URL"); v != "" {

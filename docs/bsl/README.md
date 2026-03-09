@@ -8,13 +8,13 @@
 |----------|-------|------|----------|
 | `/metadata` | GET | [metadata.bsl](metadata.bsl) | Дерево метаданных конфигурации |
 | `/object/{type}/{name}` | GET | [object.bsl](object.bsl) | Структура объекта метаданных |
-| `/module/{type}/{name}/{kind}` | GET | [module.bsl](module.bsl) | Код модуля объекта |
 | `/query` | POST | [query.bsl](query.bsl) | Выполнение запроса (только SELECT) |
 | `/version` | GET | [version.bsl](version.bsl) | Версия расширения |
-| `/search` | POST | [search.bsl](search.bsl) | Поиск по коду модулей |
 | `/form/{type}/{name}` | GET | [form-structure.bsl](form-structure.bsl) | Структура формы объекта |
 | `/validate-query` | POST | [validate-query.bsl](validate-query.bsl) | Валидация синтаксиса запроса |
 | `/eventlog` | POST | [eventlog.bsl](eventlog.bsl) | Чтение журнала регистрации |
+| `/configuration` | GET | [configuration.bsl](configuration.bsl) | Информация о конфигурации и платформе |
+| `/extensions` | GET | [extensions.bsl](extensions.bsl) | Бинарные данные (.cfe) всех расширений в base64 |
 
 ## Установка
 
