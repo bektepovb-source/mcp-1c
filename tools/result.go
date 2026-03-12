@@ -23,6 +23,15 @@ type queryLimitInput struct {
 	Limit int    `json:"limit"`
 }
 
+// searchCodeInput is the input for the search_code tool.
+type searchCodeInput struct {
+	Query    string `json:"query"`
+	Limit    int    `json:"limit"`
+	Category string `json:"category"`
+	Module   string `json:"module"`
+	Mode     string `json:"mode"`
+}
+
 // clampLimit normalises a user-supplied limit to [defaultVal, maxVal].
 func clampLimit(value, defaultVal, maxVal int) int {
 	if value <= 0 {

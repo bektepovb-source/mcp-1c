@@ -7,10 +7,25 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/feenlace/mcp-1c/dump"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// waitReady blocks until idx.Ready() returns true or timeout expires.
+func waitReady(t *testing.T, idx *dump.Index, timeout time.Duration) {
+	t.Helper()
+	deadline := time.After(timeout)
+	for !idx.Ready() {
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for index to become ready")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
 
 func TestSearchCodeTool(t *testing.T) {
 	tool := SearchCodeTool()
@@ -23,6 +38,25 @@ func TestSearchCodeTool(t *testing.T) {
 	if tool.Description == "" {
 		t.Error("expected non-empty description")
 	}
+
+	// Verify schema contains all expected properties.
+	schemaBytes, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		t.Fatalf("marshaling input schema: %v", err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(schemaBytes, &schema); err != nil {
+		t.Fatalf("parsing input schema: %v", err)
+	}
+	props, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("expected properties in schema")
+	}
+	for _, field := range []string{"query", "limit", "category", "module", "mode"} {
+		if _, ok := props[field]; !ok {
+			t.Errorf("missing property %q in schema", field)
+		}
+	}
 }
 
 func TestFormatSearchResult(t *testing.T) {
@@ -31,15 +65,17 @@ func TestFormatSearchResult(t *testing.T) {
 			Module:  "Справочник.Контрагенты.МодульОбъекта",
 			Line:    42,
 			Context: "Процедура ПередЗаписью(Отказ)\n    // проверка заполнения\nКонецПроцедуры",
+			Score:   0.847,
 		},
 		{
 			Module:  "Документ.РеализацияТоваров.МодульОбъекта",
 			Line:    15,
 			Context: "Функция ПолучитьКонтрагента()\n    Возврат Контрагент;\nКонецФункции",
+			Score:   0.512,
 		},
 	}
 
-	text := formatSearchResult(matches, 2, "Контрагент")
+	text := formatSearchResult(matches, 2, "Контрагент", dump.SearchModeSmart)
 
 	for _, want := range []string{
 		"Результаты поиска",
@@ -47,10 +83,12 @@ func TestFormatSearchResult(t *testing.T) {
 		"2 совпадений",
 		"Справочник.Контрагенты.МодульОбъекта",
 		"строка 42",
+		"score: 0.847",
 		"```bsl",
 		"ПередЗаписью",
 		"Документ.РеализацияТоваров.МодульОбъекта",
 		"строка 15",
+		"score: 0.512",
 		"ПолучитьКонтрагента",
 	} {
 		if !strings.Contains(text, want) {
@@ -59,8 +97,25 @@ func TestFormatSearchResult(t *testing.T) {
 	}
 }
 
+func TestFormatSearchResult_ExactMode(t *testing.T) {
+	matches := []dump.Match{
+		{
+			Module:  "Модуль.Тест",
+			Line:    1,
+			Context: "Тест",
+		},
+	}
+
+	text := formatSearchResult(matches, 1, "Тест", dump.SearchModeExact)
+
+	// Exact mode should NOT contain "score:".
+	if strings.Contains(text, "score:") {
+		t.Errorf("exact mode should not display score, got:\n%s", text)
+	}
+}
+
 func TestFormatSearchResult_Empty(t *testing.T) {
-	text := formatSearchResult(nil, 0, "НесуществующаяФункция")
+	text := formatSearchResult(nil, 0, "НесуществующаяФункция", dump.SearchModeSmart)
 
 	if !strings.Contains(text, "Ничего не найдено") {
 		t.Errorf("expected 'Ничего не найдено' in text, got:\n%s", text)
@@ -79,7 +134,7 @@ func TestFormatSearchResult_Truncated(t *testing.T) {
 		},
 	}
 
-	text := formatSearchResult(matches, 150, "Тест")
+	text := formatSearchResult(matches, 150, "Тест", dump.SearchModeSmart)
 
 	if !strings.Contains(text, "Показано 1 из 150 совпадений") {
 		t.Errorf("expected truncation message, got:\n%s", text)
@@ -94,12 +149,14 @@ func TestNewSearchCodeHandler(t *testing.T) {
 	mkBSL(t, dir, "Catalogs/Номенклатура/Ext/ObjectModule.bsl",
 		"Строка1\nСтрока2\nПроцедура ОбновитьЦены()\n    // обновление цен\nКонецПроцедуры\n")
 
-	searcher, err := dump.NewSearcher(dir)
+	index, err := dump.NewIndex(dir, false)
 	if err != nil {
-		t.Fatalf("NewSearcher: %v", err)
+		t.Fatalf("NewIndex: %v", err)
 	}
+	defer index.Close()
+	waitReady(t, index, 30*time.Second)
 
-	handler := NewSearchCodeHandler(searcher)
+	handler := NewSearchCodeHandler(index)
 
 	args, _ := json.Marshal(map[string]any{
 		"query": "ОбновитьЦены",
@@ -132,13 +189,53 @@ func TestNewSearchCodeHandler(t *testing.T) {
 
 	for _, want := range []string{
 		"Справочник.Номенклатура.МодульОбъекта",
-		"строка 3",
 		"ОбновитьЦены",
-		"1 совпадений",
 	} {
 		if !strings.Contains(tc.Text, want) {
 			t.Errorf("expected text to contain %q, got:\n%s", want, tc.Text)
 		}
+	}
+}
+
+func TestNewSearchCodeHandler_WithFilters(t *testing.T) {
+	dir := t.TempDir()
+	mkBSL(t, dir, "Catalogs/Тест/Ext/ObjectModule.bsl",
+		"Процедура ОбщаяЛогика()\nКонецПроцедуры\n")
+	mkBSL(t, dir, "Documents/Тест/Ext/ObjectModule.bsl",
+		"Процедура ОбщаяЛогика()\nКонецПроцедуры\n")
+
+	index, err := dump.NewIndex(dir, false)
+	if err != nil {
+		t.Fatalf("NewIndex: %v", err)
+	}
+	defer index.Close()
+	waitReady(t, index, 30*time.Second)
+
+	handler := NewSearchCodeHandler(index)
+
+	args, _ := json.Marshal(map[string]any{
+		"query":    "ОбщаяЛогика",
+		"category": "Справочник",
+		"mode":     "exact",
+	})
+	req := &mcp.CallToolRequest{
+		Params: &mcp.CallToolParamsRaw{
+			Name:      "search_code",
+			Arguments: args,
+		},
+	}
+
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	tc := result.Content[0].(*mcp.TextContent)
+	if !strings.Contains(tc.Text, "1 совпадений") {
+		t.Errorf("expected 1 match with category filter, got:\n%s", tc.Text)
+	}
+	if !strings.Contains(tc.Text, "Справочник") {
+		t.Errorf("expected Справочник in result, got:\n%s", tc.Text)
 	}
 }
 
