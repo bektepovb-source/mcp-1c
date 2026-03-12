@@ -757,6 +757,100 @@ func TestIndex_GetContent_NotFound(t *testing.T) {
 	}
 }
 
+func TestIndex_IndexDocWithMeta(t *testing.T) {
+	dir := t.TempDir()
+	mkBSLFile(t, dir, "Catalogs/Тест/Ext/ObjectModule.bsl", "Процедура Тест()\nКонецПроцедуры\n")
+	idx, err := NewIndex(dir, false)
+	if err != nil {
+		t.Fatalf("NewIndex: %v", err)
+	}
+	defer idx.Close()
+	waitReady(t, idx, 30*time.Second)
+
+	err = idx.IndexDocWithMeta(
+		"ext.МоёРасширение.Документы.ЗаказКлиента.МодульОбъекта",
+		"Функция ОбработатьЗаказMeta()\n\tВозврат 1;\nКонецФункции\n",
+		"Расширение", "МоёРасширение",
+	)
+	if err != nil {
+		t.Fatalf("IndexDocWithMeta: %v", err)
+	}
+
+	if idx.ModuleCount() != 2 {
+		t.Errorf("expected ModuleCount 2, got %d", idx.ModuleCount())
+	}
+
+	matches, total, err := idx.Search(SearchParams{Query: "ОбработатьЗаказMeta", Mode: SearchModeSmart, Limit: 50})
+	if err != nil {
+		t.Fatalf("Search smart: %v", err)
+	}
+	if total == 0 || len(matches) == 0 {
+		t.Error("expected smart search to find IndexDocWithMeta document")
+	}
+
+	matches, total, err = idx.Search(SearchParams{
+		Query: "ОбработатьЗаказMeta", Mode: SearchModeExact, Category: "Расширение", Limit: 50,
+	})
+	if err != nil {
+		t.Fatalf("Search with category filter: %v", err)
+	}
+	if total == 0 || len(matches) == 0 {
+		t.Error("expected category-filtered search to find IndexDocWithMeta document")
+	}
+
+	content, ok := idx.GetContent("ext.МоёРасширение.Документы.ЗаказКлиента.МодульОбъекта")
+	if !ok {
+		t.Fatal("expected GetContent to return ok=true")
+	}
+	if !strings.Contains(content, "ОбработатьЗаказMeta") {
+		t.Errorf("expected content to contain 'ОбработатьЗаказMeta', got %q", content)
+	}
+}
+
+func TestIndex_IndexDocWithMeta_NotReady(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	idx := &Index{
+		dir:           t.TempDir(),
+		alias:         bleve.NewIndexAlias(),
+		contentByName: make(map[string]string),
+		ctx:           ctx,
+		cancel:        cancel,
+		done:          make(chan struct{}),
+	}
+	defer close(idx.done)
+	err := idx.IndexDocWithMeta("id", "content", "cat", "mod")
+	if err == nil {
+		t.Fatal("expected error when IndexDocWithMeta on not-ready index")
+	}
+}
+
+func TestIndex_IndexDocWithMeta_Dedup(t *testing.T) {
+	dir := t.TempDir()
+	mkBSLFile(t, dir, "Catalogs/Тест/Ext/ObjectModule.bsl", "// test\n")
+	idx, err := NewIndex(dir, false)
+	if err != nil {
+		t.Fatalf("NewIndex: %v", err)
+	}
+	defer idx.Close()
+	waitReady(t, idx, 30*time.Second)
+
+	docID := "ext.Test.Cat.Obj.Mod"
+	_ = idx.IndexDocWithMeta(docID, "v1", "Cat", "Mod")
+	_ = idx.IndexDocWithMeta(docID, "v2", "Cat", "Mod")
+
+	if idx.ModuleCount() != 2 {
+		t.Errorf("expected ModuleCount 2 (1 file + 1 runtime), got %d", idx.ModuleCount())
+	}
+	content, ok := idx.GetContent(docID)
+	if !ok {
+		t.Fatal("expected GetContent ok=true")
+	}
+	if content != "v2" {
+		t.Errorf("expected 'v2', got %q", content)
+	}
+}
+
 func TestIndex_DeleteDoc_RemovesFromNames(t *testing.T) {
 	dir := t.TempDir()
 	mkBSLFile(t, dir, "Catalogs/Тест/Ext/ObjectModule.bsl", "Процедура Удаляемая()\nКонецПроцедуры\n")

@@ -583,6 +583,40 @@ func (idx *Index) IndexDoc(id string, content string) error {
 	return nil
 }
 
+// IndexDocWithMeta adds or replaces a document in the index with explicit metadata.
+// Unlike IndexDoc, it does NOT call parseModuleName — category and module are set directly.
+// The document is routed to a shard by FNV-1a hash of the id.
+// Requires Ready() == true.
+func (idx *Index) IndexDocWithMeta(id, content, category, module string) error {
+	if !idx.ready.Load() {
+		return fmt.Errorf("index not ready: cannot IndexDocWithMeta while building")
+	}
+	if len(idx.shards) == 0 {
+		return fmt.Errorf("index has no shards")
+	}
+
+	doc := bslDocument{
+		Name:     id,
+		Category: category,
+		Module:   module,
+		Content:  content,
+	}
+
+	si := shardForID(id, len(idx.shards))
+	if err := idx.shards[si].Index(id, doc); err != nil {
+		return fmt.Errorf("indexing doc %q in shard %d: %w", id, si, err)
+	}
+
+	idx.mu.Lock()
+	if _, exists := idx.contentByName[id]; !exists {
+		idx.names = append(idx.names, id)
+	}
+	idx.contentByName[id] = content
+	idx.mu.Unlock()
+
+	return nil
+}
+
 // DeleteDoc removes a document from the index at runtime.
 // The shard is determined by FNV-1a hash of the id (same routing as IndexDoc).
 // It removes from both contentByName and names, so ModuleCount and all search
