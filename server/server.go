@@ -9,7 +9,7 @@ import (
 )
 
 // New creates an MCP server with basic configuration and registers tools.
-// If dumpIndex is provided, the code_search text action will be available.
+// If dumpIndex is provided, the search_code tool will be registered.
 func New(version string, onecClient *onec.Client, dumpIndex *dump.Index) *mcp.Server {
 	s := mcp.NewServer(
 		&mcp.Implementation{
@@ -18,19 +18,25 @@ func New(version string, onecClient *onec.Client, dumpIndex *dump.Index) *mcp.Se
 		},
 		nil,
 	)
+	s.AddTool(tools.MetadataTool(), tools.NewMetadataHandler(onecClient))
+	s.AddTool(tools.ObjectStructureTool(), tools.NewObjectStructureHandler(onecClient))
+	s.AddTool(tools.QueryTool(), tools.NewQueryHandler(onecClient))
+	if dumpIndex != nil {
+		s.AddTool(tools.SearchCodeTool(), tools.NewSearchCodeHandler(dumpIndex))
+	}
 
-	// Pass dump directory to code_read handler so it can enrich form responses
+	// Pass dump directory to form handler so it can enrich the HTTP response
 	// with data from Form.xml files parsed from the dump.
 	var dumpDir string
 	if dumpIndex != nil {
 		dumpDir = dumpIndex.Dir()
 	}
+	s.AddTool(tools.FormStructureTool(), tools.NewFormStructureHandler(onecClient, dumpDir))
 
-	s.AddTool(tools.CodeReadTool(), tools.NewCodeReadHandler(onecClient, dumpDir))
-	s.AddTool(tools.CodeSearchTool(), tools.NewCodeSearchHandler(dumpIndex))
-	s.AddTool(tools.CodeExecuteTool(), tools.NewCodeExecuteHandler(onecClient))
-	s.AddTool(tools.SystemTool(), tools.NewSystemHandler(onecClient))
-
+	s.AddTool(tools.ValidateQueryTool(), tools.NewValidateQueryHandler(onecClient))
+	s.AddTool(tools.EventLogTool(), tools.NewEventLogHandler(onecClient))
+	s.AddTool(tools.ConfigurationInfoTool(), tools.NewConfigurationInfoHandler(onecClient))
+	tools.RegisterBSLHelp(s)
 	prompts.RegisterAll(s)
 	return s
 }

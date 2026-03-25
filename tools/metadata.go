@@ -178,7 +178,7 @@ func formatMetadataTree(tree map[string][]string) string {
 func formatMetadataSummary(tree map[string][]string) string {
 	var b strings.Builder
 	b.WriteString("# Метаданные конфигурации 1С (сводка)\n\n")
-	b.WriteString("Для получения списка объектов вызови code_read с action=metadata_tree и параметром filter.\n\n")
+	b.WriteString("Для получения списка объектов вызови get_metadata_tree с параметром filter.\n\n")
 
 	for _, cat := range metadataCategories {
 		items, ok := tree[cat.key]

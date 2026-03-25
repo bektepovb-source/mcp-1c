@@ -105,7 +105,7 @@ func TestPromptHandlers(t *testing.T) {
 				"object_type": "Document",
 				"object_name": "ПриходнаяНакладная",
 			},
-			wantKeyword: "code_read",
+			wantKeyword: "get_object_structure",
 		},
 		{
 			name:    "write_posting",
@@ -121,13 +121,13 @@ func TestPromptHandlers(t *testing.T) {
 			arguments: map[string]string{
 				"query": "ВЫБРАТЬ * ИЗ Справочник.Контрагенты",
 			},
-			wantKeyword: "code_execute",
+			wantKeyword: "execute_query",
 		},
 		{
 			name:        "explain_config",
 			handler:     handleExplainConfig,
 			arguments:   map[string]string{},
-			wantKeyword: "code_read",
+			wantKeyword: "get_metadata_tree",
 		},
 		{
 			name:    "analyze_error",
@@ -135,7 +135,7 @@ func TestPromptHandlers(t *testing.T) {
 			arguments: map[string]string{
 				"error_text": "Поле не найдено \"Номенклатура\"",
 			},
-			wantKeyword: "code_search",
+			wantKeyword: "search_code",
 		},
 		{
 			name:    "find_duplicates",
@@ -144,7 +144,7 @@ func TestPromptHandlers(t *testing.T) {
 				"object_type": "Catalog",
 				"object_name": "Контрагенты",
 			},
-			wantKeyword: "code_search",
+			wantKeyword: "search_code",
 		},
 		{
 			name:    "write_report",
@@ -152,7 +152,7 @@ func TestPromptHandlers(t *testing.T) {
 			arguments: map[string]string{
 				"description": "Отчёт по продажам за период",
 			},
-			wantKeyword: "code_execute",
+			wantKeyword: "execute_query",
 		},
 		{
 			name:    "explain_object",
@@ -161,7 +161,7 @@ func TestPromptHandlers(t *testing.T) {
 				"object_type": "AccumulationRegister",
 				"object_name": "ТоварыНаСкладах",
 			},
-			wantKeyword: "code_read",
+			wantKeyword: "get_object_structure",
 		},
 	}
 

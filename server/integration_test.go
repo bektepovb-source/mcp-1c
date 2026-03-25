@@ -190,7 +190,7 @@ func setupIntegration(t *testing.T) (*mcp.ClientSession, func()) {
 	mock := httptest.NewServer(mock1CHandler())
 	client := onec.NewClient(mock.URL, "", "")
 
-	// Create a temp dump directory for code_search text tests.
+	// Create a temp dump directory for search_code tests.
 	dumpDir := t.TempDir()
 	mkBSL(t, dumpDir, "Documents/РеализацияТоваровУслуг/Ext/ObjectModule.bsl",
 		"Процедура ОбработкаПроведения(Отказ, РежимПроведения)\n\t// Код проведения\nКонецПроцедуры\n")
@@ -256,7 +256,9 @@ func TestIntegration_ListTools(t *testing.T) {
 	}
 
 	expected := []string{
-		"code_read", "code_search", "code_execute", "system",
+		"get_metadata_tree", "get_object_structure", "execute_query",
+		"search_code", "get_form_structure", "validate_query",
+		"get_event_log", "get_configuration_info", "bsl_syntax_help",
 	}
 	for _, want := range expected {
 		if !toolNames[want] {
@@ -269,14 +271,14 @@ func TestIntegration_ListTools(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeRead_MetadataTree(t *testing.T) {
+func TestIntegration_MetadataTree(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	// Without filter -- summary with category names and counts.
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "code_read",
-		Arguments: map[string]any{"action": "metadata_tree"},
+		Name:      "get_metadata_tree",
+		Arguments: map[string]any{},
 	})
 	if err != nil {
 		t.Fatalf("CallTool error: %v", err)
@@ -299,8 +301,8 @@ func TestIntegration_CodeRead_MetadataTree(t *testing.T) {
 
 	// With filter -- detailed list of objects in category.
 	result, err = session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "code_read",
-		Arguments: map[string]any{"action": "metadata_tree", "filter": "Справочники"},
+		Name:      "get_metadata_tree",
+		Arguments: map[string]any{"filter": "Справочники"},
 	})
 	if err != nil {
 		t.Fatalf("CallTool with filter error: %v", err)
@@ -313,14 +315,13 @@ func TestIntegration_CodeRead_MetadataTree(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeRead_ObjectStructure(t *testing.T) {
+func TestIntegration_ObjectStructure(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "code_read",
+		Name: "get_object_structure",
 		Arguments: map[string]any{
-			"action":      "object_structure",
 			"object_type": "Document",
 			"object_name": "РеализацияТоваровУслуг",
 		},
@@ -340,14 +341,13 @@ func TestIntegration_CodeRead_ObjectStructure(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeRead_ObjectStructure_Register(t *testing.T) {
+func TestIntegration_ObjectStructure_Register(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "code_read",
+		Name: "get_object_structure",
 		Arguments: map[string]any{
-			"action":      "object_structure",
 			"object_type": "AccumulationRegister",
 			"object_name": "ТоварыНаСкладах",
 		},
@@ -367,14 +367,13 @@ func TestIntegration_CodeRead_ObjectStructure_Register(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeRead_ObjectStructure_NotFound(t *testing.T) {
+func TestIntegration_ObjectStructure_NotFound(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	_, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "code_read",
+		Name: "get_object_structure",
 		Arguments: map[string]any{
-			"action":      "object_structure",
 			"object_type": "Document",
 			"object_name": "НесуществующийДокумент",
 		},
@@ -387,14 +386,13 @@ func TestIntegration_CodeRead_ObjectStructure_NotFound(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeRead_FormStructure(t *testing.T) {
+func TestIntegration_FormStructure(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "code_read",
+		Name: "get_form_structure",
 		Arguments: map[string]any{
-			"action":      "form_structure",
 			"object_type": "Document",
 			"object_name": "РеализацияТоваровУслуг",
 		},
@@ -414,13 +412,13 @@ func TestIntegration_CodeRead_FormStructure(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeRead_ConfigInfo(t *testing.T) {
+func TestIntegration_ConfigInfo(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name:      "code_read",
-		Arguments: map[string]any{"action": "config_info"},
+		Name:      "get_configuration_info",
+		Arguments: map[string]any{},
 	})
 	if err != nil {
 		t.Fatalf("CallTool error: %v", err)
@@ -442,15 +440,14 @@ func TestIntegration_CodeRead_ConfigInfo(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeSearch_Text(t *testing.T) {
+func TestIntegration_SearchCode(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "code_search",
+		Name: "search_code",
 		Arguments: map[string]any{
-			"action": "text",
-			"query":  "ОбработкаПроведения",
+			"query": "ОбработкаПроведения",
 		},
 	})
 	if err != nil {
@@ -472,15 +469,14 @@ func TestIntegration_CodeSearch_Text(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeSearch_SyntaxHelp(t *testing.T) {
+func TestIntegration_BSLSyntaxHelp(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "code_search",
+		Name: "bsl_syntax_help",
 		Arguments: map[string]any{
-			"action": "syntax_help",
-			"query":  "СтрНайти",
+			"query": "СтрНайти",
 		},
 	})
 	if err != nil {
@@ -499,15 +495,14 @@ func TestIntegration_CodeSearch_SyntaxHelp(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeExecute_Query(t *testing.T) {
+func TestIntegration_ExecuteQuery(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "code_execute",
+		Name: "execute_query",
 		Arguments: map[string]any{
-			"action": "query",
-			"query":  "ВЫБРАТЬ Наименование ИЗ Справочник.Контрагенты",
+			"query": "ВЫБРАТЬ Наименование ИЗ Справочник.Контрагенты",
 		},
 	})
 	if err != nil {
@@ -525,15 +520,14 @@ func TestIntegration_CodeExecute_Query(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeExecute_Validate_Valid(t *testing.T) {
+func TestIntegration_ValidateQuery_Valid(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "code_execute",
+		Name: "validate_query",
 		Arguments: map[string]any{
-			"action": "validate",
-			"query":  "ВЫБРАТЬ Наименование ИЗ Справочник.Контрагенты",
+			"query": "ВЫБРАТЬ Наименование ИЗ Справочник.Контрагенты",
 		},
 	})
 	if err != nil {
@@ -549,15 +543,14 @@ func TestIntegration_CodeExecute_Validate_Valid(t *testing.T) {
 	}
 }
 
-func TestIntegration_CodeExecute_Validate_Invalid(t *testing.T) {
+func TestIntegration_ValidateQuery_Invalid(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "code_execute",
+		Name: "validate_query",
 		Arguments: map[string]any{
-			"action": "validate",
-			"query":  "ОБНОВИТЬ Справочник.Контрагенты",
+			"query": "ОБНОВИТЬ Справочник.Контрагенты",
 		},
 	})
 	if err != nil {
@@ -573,16 +566,15 @@ func TestIntegration_CodeExecute_Validate_Invalid(t *testing.T) {
 	}
 }
 
-func TestIntegration_System_EventLog(t *testing.T) {
+func TestIntegration_EventLog(t *testing.T) {
 	session, cleanup := setupIntegration(t)
 	defer cleanup()
 
 	result, err := session.CallTool(context.Background(), &mcp.CallToolParams{
-		Name: "system",
+		Name: "get_event_log",
 		Arguments: map[string]any{
-			"action": "event_log",
-			"level":  "Ошибка",
-			"limit":  10,
+			"level": "Ошибка",
+			"limit": 10,
 		},
 	})
 	if err != nil {
@@ -680,8 +672,8 @@ func TestIntegration_GetPrompt_ReviewModule(t *testing.T) {
 	for _, keyword := range []string{
 		"Document",
 		"РеализацияТоваровУслуг",
-		"code_read",
-		"code_search",
+		"get_object_structure",
+		"search_code",
 	} {
 		if !strings.Contains(tc.Text, keyword) {
 			t.Errorf("expected %q in prompt text, got:\n%s", keyword, tc.Text)

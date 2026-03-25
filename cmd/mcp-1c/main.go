@@ -28,7 +28,7 @@ func main() {
 	baseURL := flag.String("base", "", "Base URL of 1C HTTP service")
 	user := flag.String("user", "", "1C HTTP service user")
 	password := flag.String("password", "", "1C HTTP service password")
-	dumpDir := flag.String("dump", "", "Path to DumpConfigToFiles output (enables code_search text action)")
+	dumpDir := flag.String("dump", "", "Path to DumpConfigToFiles output (enables search_code)")
 	reindex := flag.Bool("reindex", false, "Force rebuild of search index cache")
 	installDB := flag.String("install", "", "Install extension into 1C database at given path")
 	serverMode := flag.Bool("server", false, `Treat --install value as server connection string (server\database)`)
