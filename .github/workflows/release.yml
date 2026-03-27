@@ -65,7 +65,7 @@ jobs:
         with:
           name: build-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
-          retention-days: 7
+          retention-days: 1
 
   release:
     name: Create Release
