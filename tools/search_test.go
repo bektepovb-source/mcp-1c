@@ -75,7 +75,7 @@ func TestFormatSearchResult(t *testing.T) {
 		},
 	}
 
-	text := formatSearchResult(matches, 2, "Контрагент", dump.SearchModeSmart)
+	text := FormatSearchResult(matches, 2, "Контрагент", dump.SearchModeSmart, nil)
 
 	for _, want := range []string{
 		"Результаты поиска",
@@ -106,7 +106,7 @@ func TestFormatSearchResult_ExactMode(t *testing.T) {
 		},
 	}
 
-	text := formatSearchResult(matches, 1, "Тест", dump.SearchModeExact)
+	text := FormatSearchResult(matches, 1, "Тест", dump.SearchModeExact, nil)
 
 	// Exact mode should NOT contain "score:".
 	if strings.Contains(text, "score:") {
@@ -115,7 +115,7 @@ func TestFormatSearchResult_ExactMode(t *testing.T) {
 }
 
 func TestFormatSearchResult_Empty(t *testing.T) {
-	text := formatSearchResult(nil, 0, "НесуществующаяФункция", dump.SearchModeSmart)
+	text := FormatSearchResult(nil, 0, "НесуществующаяФункция", dump.SearchModeSmart, nil)
 
 	if !strings.Contains(text, "Ничего не найдено") {
 		t.Errorf("expected 'Ничего не найдено' in text, got:\n%s", text)
@@ -134,7 +134,7 @@ func TestFormatSearchResult_Truncated(t *testing.T) {
 		},
 	}
 
-	text := formatSearchResult(matches, 150, "Тест", dump.SearchModeSmart)
+	text := FormatSearchResult(matches, 150, "Тест", dump.SearchModeSmart, nil)
 
 	if !strings.Contains(text, "Показано 1 из 150 совпадений") {
 		t.Errorf("expected truncation message, got:\n%s", text)

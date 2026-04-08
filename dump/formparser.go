@@ -1,6 +1,7 @@
 package dump
 
 import (
+	"bytes"
 	"encoding/xml"
 	"fmt"
 	"os"
@@ -37,26 +38,8 @@ type FormHandlerInfo struct {
 	Handler string
 }
 
-// objectTypeToDumpDir maps 1C object type names (as used in the tool input)
-// to the dump directory names created by DumpConfigToFiles.
-var objectTypeToDumpDir = map[string]string{
-	"Catalog":                    "Catalogs",
-	"Document":                   "Documents",
-	"DataProcessor":              "DataProcessors",
-	"Report":                     "Reports",
-	"InformationRegister":        "InformationRegisters",
-	"AccumulationRegister":       "AccumulationRegisters",
-	"AccountingRegister":         "AccountingRegisters",
-	"CalculationRegister":        "CalculationRegisters",
-	"ChartOfAccounts":            "ChartsOfAccounts",
-	"ChartOfCharacteristicTypes": "ChartsOfCharacteristicTypes",
-	"ChartOfCalculationTypes":    "ChartsOfCalculationTypes",
-	"ExchangePlan":               "ExchangePlans",
-	"BusinessProcess":            "BusinessProcesses",
-	"Task":                       "Tasks",
-	"Enum":                       "Enums",
-	"Constant":                   "Constants",
-}
+// objectTypeToDumpDir is defined in metadata_types.go and maps 1C object type
+// names (as used in the tool input) to dump directory names.
 
 // FindFormFiles locates all Form.xml files for the given object in the dump directory.
 // It returns a map of form name to absolute file path.
@@ -64,6 +47,12 @@ func FindFormFiles(dumpDir, objectType, objectName string) (map[string]string, e
 	dirName, ok := objectTypeToDumpDir[objectType]
 	if !ok {
 		return nil, fmt.Errorf("unknown object type %q for dump lookup", objectType)
+	}
+
+	if strings.Contains(objectName, "..") ||
+		strings.Contains(objectName, "/") ||
+		strings.Contains(objectName, "\\") {
+		return nil, fmt.Errorf("invalid object name %q: contains path traversal characters", objectName)
 	}
 
 	formsDir := filepath.Join(dumpDir, dirName, objectName, "Forms")
@@ -104,7 +93,7 @@ func ParseFormXML(path string) (*FormInfo, error) {
 // prefixed names (e.g., v8:item) into their full namespace form, so we
 // match on the Local part of the name only.
 func parseFormXMLData(data []byte) (*FormInfo, error) {
-	decoder := xml.NewDecoder(strings.NewReader(string(data)))
+	decoder := xml.NewDecoder(bytes.NewReader(data))
 	form := &FormInfo{}
 
 	// depth tracks XML nesting depth.

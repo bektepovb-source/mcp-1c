@@ -20,6 +20,15 @@ import (
 	"github.com/blevesearch/bleve/v2/search/query"
 )
 
+// utf8BOM is the 3-byte UTF-8 Byte Order Mark (U+FEFF) that 1C DumpConfigToFiles
+// prepends to BSL files. It must be stripped before indexing or returning content.
+const utf8BOM = "\xEF\xBB\xBF"
+
+// stripBOM removes the UTF-8 BOM prefix from s if present.
+func stripBOM(s string) string {
+	return strings.TrimPrefix(s, utf8BOM)
+}
+
 // Match represents a single search hit in a BSL module.
 type Match struct {
 	Module  string  // Human-readable module path (e.g. "Документ.РеализацияТоваров.МодульОбъекта")
@@ -35,27 +44,11 @@ func extractContext(lines []string, idx, window int) string {
 	return strings.Join(lines[start:end], "\n")
 }
 
-// dumpDirNames maps 1C metadata type names (English) used in DumpConfigToFiles
-// to their Russian display name prefixes.
-var dumpDirNames = map[string]string{
-	"Catalogs":               "Справочник",
-	"Documents":              "Документ",
-	"DataProcessors":         "Обработка",
-	"Reports":                "Отчет",
-	"InformationRegisters":   "РегистрСведений",
-	"AccumulationRegisters":  "РегистрНакопления",
-	"AccountingRegisters":    "РегистрБухгалтерии",
-	"CalculationRegisters":   "РегистрРасчета",
-	"ChartsOfAccounts":       "ПланСчетов",
-	"ChartsOfCharacteristicTypes": "ПланВидовХарактеристик",
-	"ChartsOfCalculationTypes":    "ПланВидовРасчета",
-	"ExchangePlans":          "ПланОбмена",
-	"BusinessProcesses":      "БизнесПроцесс",
-	"Tasks":                  "Задача",
-	"CommonModules":          "ОбщийМодуль",
-	"Enums":                  "Перечисление",
-	"Constants":              "Константа",
-}
+// synonymMapOnce ensures buildSynonymMap is called only once.
+var (
+	synonymMapOnce  sync.Once
+	cachedSynonymMap map[string]string
+)
 
 // moduleNameSuffixes maps BSL file names to their module type suffix.
 var moduleNameSuffixes = map[string]string{
@@ -208,7 +201,7 @@ func (idx *Index) GetContent(id string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	content := string(data)
+	content := stripBOM(string(data))
 	idx.contentByName[id] = content
 	return content, true
 }
@@ -548,7 +541,7 @@ func (idx *Index) loadBSLFiles(dir string) error {
 			}
 			relSlash := filepath.ToSlash(rel)
 			name := bslPathToModuleName(rel)
-			results <- loadedModule{name: name, relPath: relSlash, content: string(data)}
+			results <- loadedModule{name: name, relPath: relSlash, content: stripBOM(string(data))}
 		}(p)
 	}
 
@@ -652,7 +645,7 @@ func (idx *Index) ensureAllContentLoaded() {
 				return
 			}
 			idx.contentMu.Lock()
-			idx.contentByName[name] = string(data)
+			idx.contentByName[name] = stripBOM(string(data))
 			idx.contentMu.Unlock()
 		}(item.name, item.path)
 	}
@@ -846,12 +839,12 @@ func (idx *Index) Search(params SearchParams) ([]Match, int, error) {
 		}
 		return idx.searchLineByLine(params, func(line, _ string) bool {
 			return re.MatchString(line)
-		}, params.Query)
+		}, params.Query, false)
 	case SearchModeExact:
 		lower := strings.ToLower(params.Query)
-		return idx.searchLineByLine(params, func(line, q string) bool {
-			return strings.Contains(strings.ToLower(line), q)
-		}, lower)
+		return idx.searchLineByLine(params, func(line, _ string) bool {
+			return strings.Contains(line, lower)
+		}, lower, true)
 	default:
 		return nil, 0, fmt.Errorf("unknown search mode: %q", params.Mode)
 	}
@@ -890,28 +883,60 @@ func (idx *Index) searchSmart(params SearchParams) ([]Match, int, error) {
 	lower := strings.ToLower(params.Query)
 	tokens := strings.Fields(lower)
 
+	// Pre-build synonym-expanded token set for fallback when Bleve matched
+	// via synonym expansion but original tokens do not appear in the source.
+	synonymMapOnce.Do(func() { cachedSynonymMap = buildSynonymMap() })
+	synMap := cachedSynonymMap
+	expandedTokens := make([]string, 0, len(tokens)*2)
+	for _, tok := range tokens {
+		expandedTokens = append(expandedTokens, tok)
+		if syn, ok := synMap[tok]; ok {
+			expandedTokens = append(expandedTokens, syn)
+		}
+	}
+
 	var matches []Match
 	for _, hit := range result.Hits {
 		content, ok := idx.GetContent(hit.ID)
 		if !ok {
 			continue
 		}
-		// Find the first line containing any query term for context.
 		lines := strings.Split(content, "\n")
 
+		// Score each line by counting how many distinct query tokens it contains.
+		// Pick the line with the highest score; on ties, prefer the first occurrence.
 		lineNum := 0
+		bestScore := 0
 		for i, line := range lines {
 			ll := strings.ToLower(line)
+			score := 0
 			for _, tok := range tokens {
 				if strings.Contains(ll, tok) {
-					lineNum = i + 1
+					score++
+				}
+			}
+			if score > bestScore {
+				bestScore = score
+				lineNum = i + 1
+			}
+		}
+
+		// Synonym fallback: if no original token matched any line, try expanded tokens.
+		if lineNum == 0 && len(expandedTokens) > len(tokens) {
+			for i, line := range lines {
+				ll := strings.ToLower(line)
+				for _, tok := range expandedTokens {
+					if strings.Contains(ll, tok) {
+						lineNum = i + 1
+						break
+					}
+				}
+				if lineNum > 0 {
 					break
 				}
 			}
-			if lineNum > 0 {
-				break
-			}
 		}
+
 		if lineNum == 0 {
 			lineNum = 1
 		}
@@ -930,7 +955,9 @@ func (idx *Index) searchSmart(params SearchParams) ([]Match, int, error) {
 
 // searchLineByLine performs line-by-line search using a matcher function.
 // Used for regex and exact modes. Optionally pre-filters modules via Bleve.
-func (idx *Index) searchLineByLine(params SearchParams, match func(line, q string) bool, q string) ([]Match, int, error) {
+// When preLower is true, each line is pre-lowered once and the lowered version
+// is passed to the match function (avoids redundant ToLower per line).
+func (idx *Index) searchLineByLine(params SearchParams, match func(line, q string) bool, q string, preLower bool) ([]Match, int, error) {
 	candidates, err := idx.filterModules(params.Category, params.Module)
 	if err != nil {
 		return nil, 0, err
@@ -949,7 +976,11 @@ func (idx *Index) searchLineByLine(params SearchParams, match func(line, q strin
 		content := idx.contentByName[name]
 		lines := strings.Split(content, "\n")
 		for i, line := range lines {
-			if match(line, q) {
+			matchLine := line
+			if preLower {
+				matchLine = strings.ToLower(line)
+			}
+			if match(matchLine, q) {
 				total++
 				if len(matches) < params.Limit {
 					ctx := extractContext(lines, i, 2)
@@ -967,21 +998,32 @@ func (idx *Index) searchLineByLine(params SearchParams, match func(line, q strin
 }
 
 // filterModules returns the subset of module names matching category/module filters.
-// If no filters are set, returns all names. Uses PathIndex for fast in-memory filtering.
+// If no filters are set, returns a copy of all names. Uses PathIndex for fast in-memory filtering.
+// The returned slice is always a fresh copy safe for concurrent use.
 func (idx *Index) filterModules(category, moduleType string) ([]string, error) {
 	if category == "" && moduleType == "" {
-		return idx.names, nil
+		idx.mu.RLock()
+		result := slices.Clone(idx.names)
+		idx.mu.RUnlock()
+		return result, nil
 	}
 
 	// Use PathIndex for fast in-memory filtering (no Bleve query needed).
 	if idx.pathIndex != nil {
-		return idx.pathIndex.FilterDocIDs(category, moduleType), nil
+		idx.mu.RLock()
+		result := idx.pathIndex.FilterDocIDs(category, moduleType)
+		idx.mu.RUnlock()
+		return result, nil
 	}
 
 	// Fallback: linear scan if pathIndex is not yet built (should not happen
 	// since filterModules is only called after Ready() == true).
+	idx.mu.RLock()
+	allNames := slices.Clone(idx.names)
+	idx.mu.RUnlock()
+
 	var names []string
-	for _, name := range idx.names {
+	for _, name := range allNames {
 		parts := parseModuleName(name)
 		if category != "" && parts.category != category {
 			continue
@@ -1013,6 +1055,7 @@ func (idx *Index) loadFromManifestAndDiff(cacheDir string) error {
 	}
 
 	// Populate names, pathByName, pathToDocID from manifest (no filesystem I/O).
+	idx.mu.Lock()
 	idx.pathToDocID = make(map[string]string, len(manifest.Files))
 	for relPath, entry := range manifest.Files {
 		absPath := filepath.Join(idx.dir, filepath.FromSlash(relPath))
@@ -1020,6 +1063,7 @@ func (idx *Index) loadFromManifestAndDiff(cacheDir string) error {
 		idx.pathByName[entry.DocID] = absPath
 		idx.pathToDocID[relPath] = entry.DocID
 	}
+	idx.mu.Unlock()
 
 	// Diff walks the filesystem once to detect changes.
 	diff, err := manifest.Diff(idx.dir)
@@ -1042,7 +1086,11 @@ func (idx *Index) loadFromManifestAndDiff(cacheDir string) error {
 		if err := idx.shards[si].Delete(docID); err != nil {
 			slog.Warn("Failed to delete from shard", "docID", docID, "error", err)
 		}
+		idx.contentMu.Lock()
 		delete(idx.contentByName, docID)
+		idx.contentMu.Unlock()
+
+		idx.mu.Lock()
 		delete(idx.pathByName, docID)
 		delete(idx.pathToDocID, relPath)
 		for i, n := range idx.names {
@@ -1051,6 +1099,7 @@ func (idx *Index) loadFromManifestAndDiff(cacheDir string) error {
 				break
 			}
 		}
+		idx.mu.Unlock()
 	}
 
 	// Apply additions and modifications.
@@ -1062,7 +1111,7 @@ func (idx *Index) loadFromManifestAndDiff(cacheDir string) error {
 			continue
 		}
 		docID := bslPathToModuleName(relPath)
-		content := string(data)
+		content := stripBOM(string(data))
 
 		parts := parseModuleName(docID)
 		doc := bslDocument{
@@ -1078,15 +1127,23 @@ func (idx *Index) loadFromManifestAndDiff(cacheDir string) error {
 			continue
 		}
 
+		idx.contentMu.RLock()
 		_, inContent := idx.contentByName[docID]
+		idx.contentMu.RUnlock()
+
+		idx.mu.Lock()
 		_, inPath := idx.pathByName[docID]
 		if !inContent && !inPath {
 			idx.names = append(idx.names, docID)
 		}
-		// Pre-warm content cache for recently changed files.
-		idx.contentByName[docID] = content
 		idx.pathByName[docID] = absPath
 		idx.pathToDocID[relPath] = docID
+		idx.mu.Unlock()
+
+		// Pre-warm content cache for recently changed files.
+		idx.contentMu.Lock()
+		idx.contentByName[docID] = content
+		idx.contentMu.Unlock()
 	}
 
 	if len(diff.Added) > 0 || len(diff.Modified) > 0 || len(diff.Deleted) > 0 {
@@ -1101,7 +1158,10 @@ func (idx *Index) loadFromManifestAndDiff(cacheDir string) error {
 
 // ModuleCount returns the number of indexed BSL modules.
 func (idx *Index) ModuleCount() int {
-	return len(idx.names)
+	idx.mu.RLock()
+	n := len(idx.names)
+	idx.mu.RUnlock()
+	return n
 }
 
 // Dir returns the dump directory path.
@@ -1179,7 +1239,7 @@ func (idx *Index) applyIncrementalUpdate(cacheDir string) error {
 			continue
 		}
 		docID := bslPathToModuleName(relPath)
-		content := string(data)
+		content := stripBOM(string(data))
 
 		parts := parseModuleName(docID)
 		doc := bslDocument{
@@ -1224,7 +1284,14 @@ func (idx *Index) applyIncrementalUpdate(cacheDir string) error {
 
 // saveManifest builds and persists a manifest from current pathToDocID state.
 func (idx *Index) saveManifest(cacheDir string) {
-	manifest, err := buildManifest(idx.dir, idx.pathToDocID)
+	idx.mu.RLock()
+	pathCopy := make(map[string]string, len(idx.pathToDocID))
+	for k, v := range idx.pathToDocID {
+		pathCopy[k] = v
+	}
+	idx.mu.RUnlock()
+
+	manifest, err := buildManifest(idx.dir, pathCopy)
 	if err != nil {
 		slog.Warn("Cannot build manifest", "error", err)
 		return

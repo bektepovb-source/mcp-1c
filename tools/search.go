@@ -93,11 +93,28 @@ func NewSearchCodeHandler(index *dump.Index) mcp.ToolHandler {
 			return nil, fmt.Errorf("search: %w", err)
 		}
 
-		return textResult(formatSearchResult(matches, total, input.Query, mode)), nil
+		return textResult(FormatSearchResult(matches, total, input.Query, mode, nil)), nil
 	}
 }
 
-func formatSearchResult(matches []dump.Match, total int, query string, mode dump.SearchMode) string {
+// MatchDisplay holds the display name and optional prefix for a search match.
+type MatchDisplay struct {
+	Prefix      string // e.g. "[Расш] " for extension modules
+	DisplayName string // module name shown to the user
+}
+
+// MatchDisplayFunc transforms a module name into a display name with an
+// optional prefix. When nil is passed to FormatSearchResult, the module
+// name is used as-is with no prefix (default community behavior).
+type MatchDisplayFunc func(moduleName string) MatchDisplay
+
+// FormatSearchResult formats search matches into markdown text.
+//
+// displayFn is optional. When nil, each match's Module field is used as the
+// display name with no prefix (community behavior). Callers that need to
+// decorate module names (e.g. marking extension modules) can pass a custom
+// MatchDisplayFunc.
+func FormatSearchResult(matches []dump.Match, total int, query string, mode dump.SearchMode, displayFn MatchDisplayFunc) string {
 	var b strings.Builder
 
 	fmt.Fprintf(&b, "## Результаты поиска \"%s\" (%d совпадений)\n\n", query, total)
@@ -108,10 +125,18 @@ func formatSearchResult(matches []dump.Match, total int, query string, mode dump
 	}
 
 	for _, m := range matches {
+		prefix := ""
+		displayName := m.Module
+		if displayFn != nil {
+			d := displayFn(m.Module)
+			prefix = d.Prefix
+			displayName = d.DisplayName
+		}
+
 		if mode == dump.SearchModeSmart && m.Score > 0 {
-			fmt.Fprintf(&b, "### %s (строка %d, score: %.3f)\n", m.Module, m.Line, m.Score)
+			fmt.Fprintf(&b, "### %s%s (строка %d, score: %.3f)\n", prefix, displayName, m.Line, m.Score)
 		} else {
-			fmt.Fprintf(&b, "### %s (строка %d)\n", m.Module, m.Line)
+			fmt.Fprintf(&b, "### %s%s (строка %d)\n", prefix, displayName, m.Line)
 		}
 		b.WriteString("```bsl\n")
 		b.WriteString(m.Context)

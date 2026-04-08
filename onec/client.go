@@ -73,7 +73,9 @@ func (c *Client) do(req *http.Request, result any) error {
 		return fmt.Errorf("1C returned status %d: %s", resp.StatusCode, string(body))
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+	// Limit response body to 50 MB to prevent OOM on unexpectedly large payloads.
+	const maxResponseSize = 50 << 20 // 50 MB
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(result); err != nil {
 		return fmt.Errorf("decoding 1C response: %w", err)
 	}
 	return nil

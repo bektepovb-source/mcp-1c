@@ -194,7 +194,8 @@ func formatFormStructure(f *onec.FormStructure) string {
 		b.WriteString("| Имя | Тип | Заголовок | Путь к данным |\n")
 		b.WriteString("|-----|-----|-----------|---------------|\n")
 		for _, e := range f.Elements {
-			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n", e.Name, e.Type, e.Title, e.DataPath)
+			fmt.Fprintf(&b, "| %s | %s | %s | %s |\n",
+				escapePipe(e.Name), escapePipe(e.Type), escapePipe(e.Title), escapePipe(e.DataPath))
 		}
 		b.WriteByte('\n')
 	}
@@ -216,6 +217,11 @@ func formatFormStructure(f *onec.FormStructure) string {
 	}
 
 	return b.String()
+}
+
+// escapePipe escapes pipe characters so they do not break markdown tables.
+func escapePipe(s string) string {
+	return strings.ReplaceAll(s, "|", `\|`)
 }
 
 // joinMapKeys returns a comma-separated list of map keys.

@@ -268,6 +268,33 @@ func TestFindFormFiles_UnknownType(t *testing.T) {
 	}
 }
 
+func TestFindFormFiles_PathTraversal(t *testing.T) {
+	dir := t.TempDir()
+
+	cases := []struct {
+		name       string
+		objectName string
+	}{
+		{"dot-dot", "../../etc"},
+		{"dot-dot-only", ".."},
+		{"forward-slash", "foo/bar"},
+		{"backslash", "foo\\bar"},
+		{"dot-dot-backslash", "..\\secret"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := FindFormFiles(dir, "Document", tc.objectName)
+			if err == nil {
+				t.Fatal("expected error for path traversal in object name")
+			}
+			if !strings.Contains(err.Error(), "path traversal") {
+				t.Errorf("expected 'path traversal' in error, got: %v", err)
+			}
+		})
+	}
+}
+
 func TestDisplayType(t *testing.T) {
 	tests := []struct {
 		input string

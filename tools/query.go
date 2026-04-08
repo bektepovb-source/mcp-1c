@@ -102,9 +102,14 @@ func formatQueryResult(r *onec.QueryResult) string {
 		return b.String()
 	}
 
-	// Header
+	// Header (escape pipes in column names)
 	b.WriteString("| ")
-	b.WriteString(strings.Join(r.Columns, " | "))
+	for i, col := range r.Columns {
+		if i > 0 {
+			b.WriteString(" | ")
+		}
+		b.WriteString(strings.ReplaceAll(col, "|", `\|`))
+	}
 	b.WriteString(" |\n")
 
 	// Separator
@@ -134,20 +139,24 @@ func formatQueryResult(r *onec.QueryResult) string {
 }
 
 // formatCell converts a JSON-deserialized cell value to string without reflection.
+// Pipe characters are escaped so they do not break markdown table formatting.
 func formatCell(v any) string {
+	var s string
 	switch c := v.(type) {
 	case string:
-		return c
+		s = c
 	case float64:
 		if c == float64(int64(c)) {
-			return strconv.FormatInt(int64(c), 10)
+			s = strconv.FormatInt(int64(c), 10)
+		} else {
+			s = strconv.FormatFloat(c, 'f', -1, 64)
 		}
-		return strconv.FormatFloat(c, 'f', -1, 64)
 	case bool:
-		return strconv.FormatBool(c)
+		s = strconv.FormatBool(c)
 	case nil:
 		return ""
 	default:
-		return fmt.Sprint(v)
+		s = fmt.Sprint(v)
 	}
+	return strings.ReplaceAll(s, "|", `\|`)
 }

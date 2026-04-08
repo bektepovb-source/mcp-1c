@@ -17,9 +17,9 @@ import (
 const extensionName = "MCP_HTTPService"
 
 // defaultFormatVersion is the fallback XML dump format version used when the
-// platform version cannot be detected. 2.8 is the format for 1C 8.3.10 —
-// the minimum platform version we support.
-const defaultFormatVersion = "2.8"
+// platform version cannot be detected. 2.7 is the format for platforms older
+// than 8.3.14 (the lowest entry in platformFormatVersions).
+const defaultFormatVersion = "2.7"
 
 // platform85FormatVersion is the XML dump format version for 1C 8.5.x.
 const platform85FormatVersion = "2.21"

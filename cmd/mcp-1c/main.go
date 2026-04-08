@@ -7,6 +7,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/feenlace/mcp-1c/dump"
@@ -32,6 +33,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError})))
 
 	showVersion := flag.Bool("version", false, "print version and exit")
+	debug := flag.Bool("debug", false, "Enable verbose logging to file (~/.cache/mcp-1c/server.log)")
 	baseURL := flag.String("base", "", "Base URL of 1C HTTP service")
 	user := flag.String("user", "", "1C HTTP service user")
 	password := flag.String("password", "", "1C HTTP service password")
@@ -43,6 +45,17 @@ func main() {
 	dbUser := flag.String("db-user", "", "1C database user for DESIGNER (install mode)")
 	dbPassword := flag.String("db-password", "", "1C database password for DESIGNER (install mode)")
 	flag.Parse()
+
+	// When --debug is set, redirect logs to a file at INFO level.
+	// This avoids polluting stderr (which MCP clients show as errors)
+	// while still capturing useful diagnostic output.
+	if *debug {
+		if f, err := openDebugLog("mcp-1c"); err == nil {
+			log.SetOutput(f)
+			slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: slog.LevelInfo})))
+			defer f.Close()
+		}
+	}
 
 	if *showVersion {
 		fmt.Println("mcp-1c version " + version)
@@ -96,6 +109,24 @@ func main() {
 		fmt.Fprintf(os.Stderr, "mcp-1c error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+// openDebugLog creates (or truncates) a log file for debug output.
+// The file is placed under the user cache directory:
+//
+//	macOS:   ~/Library/Caches/<name>/server.log
+//	Linux:   ~/.cache/<name>/server.log
+//	Windows: %LocalAppData%/<name>/server.log
+func openDebugLog(name string) (*os.File, error) {
+	cacheBase, err := os.UserCacheDir()
+	if err != nil {
+		return nil, err
+	}
+	dir := filepath.Join(cacheBase, name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, err
+	}
+	return os.Create(filepath.Join(dir, "server.log"))
 }
 
 func checkExtensionVersion(client *onec.Client) {
