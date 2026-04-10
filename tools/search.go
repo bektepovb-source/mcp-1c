@@ -27,7 +27,9 @@ func SearchCodeTool() *mcp.Tool {
 			"Фильтрация по типу метаданных (category) и типу модуля (module). " +
 			"BSL-синонимы: поиск по английским именам находит русские и наоборот " +
 			"(StrFind -> СтрНайти, Procedure -> Процедура). " +
-			"Работает по локальной выгрузке конфигурации (DumpConfigToFiles).",
+			"Работает по локальной выгрузке конфигурации (DumpConfigToFiles). " +
+			"Режим smart (по умолчанию) для поиска по смыслу, regex для точных паттернов. " +
+			"Фильтруй по category и module для сужения результатов.",
 		InputSchema: json.RawMessage(`{
 			"type": "object",
 			"properties": {
