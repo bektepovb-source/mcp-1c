@@ -21,6 +21,7 @@ func New(version string, onecClient *onec.Client, dumpIndex *dump.Index) *mcp.Se
 	s.AddTool(tools.MetadataTool(), tools.NewMetadataHandler(onecClient))
 	s.AddTool(tools.ObjectStructureTool(), tools.NewObjectStructureHandler(onecClient))
 	s.AddTool(tools.QueryTool(), tools.NewQueryHandler(onecClient))
+	s.AddTool(tools.DossierFilesTool(), tools.NewDossierFilesHandler(onecClient))
 	if dumpIndex != nil {
 		s.AddTool(tools.SearchCodeTool(), tools.NewSearchCodeHandler(dumpIndex))
 	}
