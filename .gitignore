@@ -28,3 +28,6 @@ dist/
 extension/*.cfe
 cmd/mcp-1c/extension/
 
+/private/
+
+.roo\mcp.json
