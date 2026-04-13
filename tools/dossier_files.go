@@ -27,7 +27,7 @@ func DossierFilesTool() *mcp.Tool {
 				},
 				"guid": {
 					"type": "string",
-					"description": "Уникальный идентификатор (GUID) объекта"
+					"description": "Ключ поиска объекта. Можно передать Уникальный Идентификатор (GUID) или строковый Номер документа (например \"00000000798\")"
 				}
 			},
 			"required": ["object_type", "guid"]
