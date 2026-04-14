@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"net/url"
+
 	"github.com/feenlace/mcp-1c/onec"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -64,7 +66,10 @@ func NewDossierFilesHandler(client *onec.Client) mcp.ToolHandler {
 			return nil, fmt.Errorf("object_type and guid are required")
 		}
 
-		path := fmt.Sprintf("/dossier/%s/%s", input.ObjectType, input.GUID)
+		path := fmt.Sprintf("/dossier/%s/%s",
+			url.PathEscape(input.ObjectType),
+			url.PathEscape(input.GUID),
+		)
 
 		var files []dossierFile
 		if err := client.Get(ctx, path, &files); err != nil {
@@ -83,9 +88,16 @@ func NewDossierFilesHandler(client *onec.Client) mcp.ToolHandler {
 			// Process data
 			var fileData []byte
 			if f.Data != "" {
-				decoded, err := base64.StdEncoding.DecodeString(f.Data)
+				/// Убираем переносы строк, которые отдает 1С
+				cleanData := strings.ReplaceAll(f.Data, "\r", "")
+				cleanData := strings.ReplaceAll(cleanData, "\n", "")
+
+				decoded, err := base64.StdEncoding.DecodeString(cleanData)
 				if err == nil {
 					fileData = decoded
+				} else {
+					// Обязательно добавь логирование, чтобы не гадать при сбоях
+					return nil, fmt.Errorf("base64 decode error for file %s: %w", f.Name, err)
 				}
 			}
 
