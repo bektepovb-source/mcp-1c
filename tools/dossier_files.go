@@ -108,9 +108,9 @@ func NewDossierFilesHandler(client *onec.Client) mcp.ToolHandler {
 					if ext == "jpg" {
 						mimeType = "image/jpeg"
 					}
-					contents = append(contents, &mcp.ImageContent{
-						Data:     fileData,
-						MIMEType: mimeType,
+					markdownImage := fmt.Sprintf("![%s](data:%s;base64,%s)", f.Name, mimeType, string(fileData))
+					contents = append(contents, &mcp.TextContent{
+						Text: markdownImage,
 					})
 					contents = append(contents, &mcp.TextContent{
 						Text: fmt.Sprintf("Image file: %s", f.Name),
