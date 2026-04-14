@@ -90,7 +90,7 @@ func NewDossierFilesHandler(client *onec.Client) mcp.ToolHandler {
 			if f.Data != "" {
 				/// Убираем переносы строк, которые отдает 1С
 				cleanData := strings.ReplaceAll(f.Data, "\r", "")
-				cleanData := strings.ReplaceAll(cleanData, "\n", "")
+				cleanData = strings.ReplaceAll(cleanData, "\n", "")
 
 				decoded, err := base64.StdEncoding.DecodeString(cleanData)
 				if err == nil {
